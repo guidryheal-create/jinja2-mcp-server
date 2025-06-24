@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  jinja2-mcp-http:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jinja2-mcp-http
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+    environment:
+      - MCP_TRANSPORT=streamable-http
+      - MCP_PORT=8123
+      - PYTHONPATH=/app/src
+      - JINJA_AUTOESCAPE=true
+      - JINJA_CACHE_SIZE=400
+      - SECURITY_MAX_LOOP_ITERATIONS=10000
+      - LOGGING_LEVEL=INFO
+    volumes:
+      - ./examples/templates:/app/templates:ro
+      - ./config:/app/config:ro
+      - jinja_logs:/app/logs
+    profiles:
+      - http
+    command: ["--transport", "streamable-http", "--port", "8123"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8123/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 开发模式 - 支持代码热重载
+  jinja2-mcp-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: jinja2-mcp-dev
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+    environment:
+      - MCP_TRANSPORT=streamable-http
+      - MCP_PORT=8123
+      - PYTHONPATH=/app/src
+      - JINJA_AUTOESCAPE=true
+      - JINJA_CACHE_SIZE=100  # 开发模式使用较小缓存
+      - SECURITY_MAX_LOOP_ITERATIONS=1000
+      - LOGGING_LEVEL=DEBUG
+    volumes:
+      - ./src:/app/src:ro
+      - ./examples:/app/examples:ro
+      - ./run_server.py:/app/run_server.py:ro
+      - ./config:/app/config:ro
+      - jinja_logs:/app/logs
+    profiles:
+      - dev
+    command: ["--transport", "streamable-http", "--port", "8123"]
+    user: root  # 开发模式使用root用户便于调试
+
+volumes:
+  jinja_logs:
+    driver: local
+
+networks:
+  default:
+    name: jinja2-mcp-network 

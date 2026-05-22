@@ -2,11 +2,6 @@
 Jinja MCP Server using official MCP Python SDK with StreamableHttp transport.
 """
 
-import asyncio
-import json
-import os
-from typing import Any, Dict, Optional
-
 from mcp.server.fastmcp import FastMCP
 
 from .config import get_settings
@@ -99,74 +94,63 @@ class JinjaMCPServer:
         await self.jinja_manager.initialize()
         self.logger.info("Jinja MCP Server initialized successfully")
     
-    def run_stdio(self):
+    async def run_stdio(self) -> None:
         """Run the server with stdio transport."""
-        asyncio.run(self._run_stdio())
-    
-    async def _run_stdio(self):
-        """Run the server with stdio transport (async)."""
         await self.initialize()
-        self.mcp.run(transport="stdio")
-    
-    def run_streamable_http(self, host: str = "0.0.0.0", port: int = 3000):
-        """Run the server with StreamableHttp transport."""
-        asyncio.run(self._run_streamable_http(host, port))
-    
-    async def _run_streamable_http(self, host: str, port: int):
-        """Run the server with StreamableHttp transport (async)."""
+        await self.mcp.run_stdio_async()
+
+    async def run_streamable_http(self, host: str = "0.0.0.0", port: int = 3000) -> None:
+        """Run the server with Streamable HTTP transport."""
         await self.initialize()
-        
-        # Configure server for StreamableHttp
+
         import uvicorn
-        
-        # Get the ASGI app for StreamableHttp
+
         app = self.mcp.streamable_http_app()
-        
-        self.logger.info(f"Starting Jinja MCP Server on {host}:{port}")
-        
-        # Run with uvicorn
+        self.logger.info("Starting Jinja MCP Server", host=host, port=port)
+
         config = uvicorn.Config(
             app=app,
             host=host,
             port=port,
-            log_level="info"
+            log_level="info",
         )
         server = uvicorn.Server(config)
         await server.serve()
 
 
-async def main():
-    """Main entry point for the server."""
+def main() -> None:
+    """Synchronous CLI entry point for uvx and console_scripts."""
     import argparse
-    
+
+    import anyio
+
     parser = argparse.ArgumentParser(description="Jinja MCP Server")
     parser.add_argument(
-        "--transport", 
-        choices=["stdio", "streamable-http"], 
+        "--transport",
+        choices=["stdio", "streamable-http", "http"],
         default="stdio",
-        help="Transport protocol to use"
+        help="Transport protocol to use (http is an alias for streamable-http)",
     )
     parser.add_argument(
-        "--host", 
+        "--host",
         default="0.0.0.0",
-        help="Host to bind to (for streamable-http)"
+        help="Host to bind to (for streamable-http)",
     )
     parser.add_argument(
-        "--port", 
-        type=int, 
+        "--port",
+        type=int,
         default=3000,
-        help="Port to bind to (for streamable-http)"
+        help="Port to bind to (for streamable-http)",
     )
-    
+
     args = parser.parse_args()
-    
     server = JinjaMCPServer()
-    
+
     if args.transport == "stdio":
-        await server._run_stdio()
+        anyio.run(server.run_stdio)
     else:
-        await server._run_streamable_http(args.host, args.port)
+        anyio.run(server.run_streamable_http, args.host, args.port)
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    main() 

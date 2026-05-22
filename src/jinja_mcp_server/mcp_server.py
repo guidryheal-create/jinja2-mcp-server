@@ -6,21 +6,22 @@ from mcp.server.fastmcp import FastMCP
 
 from .config import get_settings
 from .jinja.environment import JinjaEnvironmentManager
-from .utils import setup_logging, get_logger
+from .utils.logging import get_logger, setup_logging
 
 
 class JinjaMCPServer:
     """Jinja2 MCP Server implementation using FastMCP."""
-    
-    def __init__(self):
+
+    def __init__(self, *, log_level: str | None = None):
         self.settings = get_settings()
         self.logger = get_logger(__name__)
         self.jinja_manager = JinjaEnvironmentManager(self.settings.jinja)
-        
-        # Create FastMCP server with StreamableHttp support
+
+        effective_log_level = log_level or self.settings.logging.level
         self.mcp = FastMCP(
             name=self.settings.mcp.name,
-            stateless_http=False  # Use stateful mode for session management
+            stateless_http=False,
+            log_level=effective_log_level,  # type: ignore[arg-type]
         )
         
         # Register tools
@@ -88,12 +89,10 @@ class JinjaMCPServer:
             """
             return await self.jinja_manager.get_template_info(template_content)
     
-    async def initialize(self):
-        """Initialize the server."""
-        setup_logging(self.settings.logging)
+    async def initialize(self) -> None:
+        """Initialize the Jinja2 environment."""
         await self.jinja_manager.initialize()
-        self.logger.info("Jinja MCP Server initialized successfully")
-    
+
     async def run_stdio(self) -> None:
         """Run the server with stdio transport."""
         await self.initialize()
@@ -101,7 +100,9 @@ class JinjaMCPServer:
 
     async def run_streamable_http(self, host: str = "0.0.0.0", port: int = 3000) -> None:
         """Run the server with Streamable HTTP transport."""
+        setup_logging(self.settings.logging, transport="streamable-http")
         await self.initialize()
+        self.logger.info("Jinja MCP Server initialized")
 
         import uvicorn
 
@@ -144,7 +145,13 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    server = JinjaMCPServer()
+    settings = get_settings()
+
+    log_level = "WARNING" if args.transport == "stdio" else None
+    if args.transport == "stdio":
+        setup_logging(settings.logging, transport="stdio")
+
+    server = JinjaMCPServer(log_level=log_level)
 
     if args.transport == "stdio":
         anyio.run(server.run_stdio)

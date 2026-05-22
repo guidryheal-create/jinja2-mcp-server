@@ -47,26 +47,48 @@
 git clone https://github.com/WW-AI-Lab/jinja2-mcp-server.git
 cd jinja2-mcp-server
 
-# 安装依赖
-pip install -r requirements.txt
+# 推荐：使用 uv（无需手动安装依赖）
+uv sync
 
-# 立即启动 (stdio模式，适合AI客户端)
-python run_server.py --transport stdio
+# 本地运行（stdio，适合 Claude Desktop / Cursor 等 MCP 客户端）
+uv run jinja2-mcp-server --transport stdio
 
-# 或启动HTTP模式 (适合调试和测试)
-python run_server.py --transport streamable-http --port 8123
+# 或从当前目录通过 uvx 运行
+uvx --from . jinja2-mcp-server --transport stdio
+
+# 直接 HTTP（适合本地调试）
+uv run jinja2-mcp-server --transport streamable-http --port 8123
 ```
+
+### 🌐 通过 mcp-proxy 暴露 Streamable HTTP
+
+当需要让浏览器、MCP Inspector 或其它 HTTP 客户端访问本服务时，可用 [mcp-proxy](https://github.com/modelcontextprotocol/mcp-proxy) 把 **stdio 子进程** 转成 **Streamable HTTP**：
+
+```bash
+# 在项目根目录执行
+uv tool install mcp-proxy
+
+uv tool run mcp-proxy \
+  --host 0.0.0.0 \
+  --port 8087 \
+  --allow-origin "*" \
+  --transport=streamablehttp \
+  -- uvx --from . jinja2-mcp-server --transport stdio
+```
+
+- MCP 端点：`http://127.0.0.1:8087/mcp`
+- 子进程必须使用 `--transport stdio`；日志会写到 **stderr**，不会污染 stdout 上的 JSON-RPC。
+
+**stdio 注意事项**：MCP 规定 stdout 仅用于 JSON-RPC。请勿将 `LOGGING_LEVEL=DEBUG` 或把日志重定向到 stdout，否则会出现 `Failed to parse JSONRPC message from server`。
 
 ### 🎮 快速体验
 
 ```bash
-# 使用MCP Inspector进行可视化测试
-# 1. 启动HTTP服务器
-python run_server.py --transport streamable-http --port 8123
+# 方式 A：MCP Inspector + mcp-proxy（见上一节命令，端口 8087）
 
-# 2. 打开MCP Inspector: https://github.com/modelcontextprotocol/inspector
-# 3. 连接到: http://localhost:8123
-# 4. 测试render_template工具
+# 方式 B：内置 Streamable HTTP
+uv run jinja2-mcp-server --transport streamable-http --port 8123
+# 连接到 http://localhost:8123/mcp
 ```
 
 ---
@@ -206,7 +228,7 @@ cp env.example .env
 JINJA_AUTOESCAPE=true
 JINJA_CACHE_SIZE=400
 SECURITY_MAX_LOOP_ITERATIONS=10000
-LOGGING_LEVEL=INFO
+LOGGING_LEVEL=WARNING
 ```
 
 ### JSON配置文件

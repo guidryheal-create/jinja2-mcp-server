@@ -9,7 +9,7 @@ import jinja2
 from jinja2 import Environment, FileSystemLoader, BaseLoader, select_autoescape, meta
 
 from ..config.settings import JinjaSettings
-from ..utils import get_logger
+from ..utils.logging import get_logger
 from ..utils.exceptions import TemplateError, RenderError, ValidationError
 
 

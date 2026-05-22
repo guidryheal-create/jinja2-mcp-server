@@ -11,25 +11,50 @@ from structlog.types import Processor
 from ..config import LoggingSettings
 
 
-def setup_logging(settings: LoggingSettings) -> None:
-    """Setup logging configuration based on settings."""
-    
-    # Configure standard logging
-    logging_level = getattr(logging, settings.level.upper())
-    
-    # Create formatter
+def _bootstrap_structlog() -> None:
+    """Use stdlib logging (stderr) instead of structlog's default PrintLogger (stdout)."""
+    structlog.configure(
+        processors=[
+            structlog.processors.add_log_level,
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(logging.NOTSET),
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=False,
+    )
+
+
+_bootstrap_structlog()
+
+
+def setup_logging(
+    settings: LoggingSettings,
+    *,
+    transport: str | None = None,
+) -> None:
+    """Setup logging configuration based on settings.
+
+    For MCP stdio transport, logs must go to stderr only — stdout is reserved
+    for JSON-RPC messages.
+    """
+    level_name = settings.level.upper()
+    use_structlog = settings.enable_structlog
+    if transport == "stdio":
+        # MCP stdio: stdout is JSON-RPC only — keep stderr quiet and non-JSON
+        level_name = "WARNING"
+        use_structlog = False
+
+    logging_level = getattr(logging, level_name)
+
     formatter = logging.Formatter(settings.format)
-    
-    # Configure root logger
+
     root_logger = logging.getLogger()
     root_logger.setLevel(logging_level)
-    
-    # Remove existing handlers
+
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
-    
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
+
+    console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setLevel(logging_level)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
@@ -44,42 +69,62 @@ def setup_logging(settings: LoggingSettings) -> None:
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
     
-    # Configure structlog if enabled
-    if settings.enable_structlog:
-        configure_structlog(settings)
+    if transport == "stdio":
+        for logger_name in ("mcp", "mcp.server", "fastmcp", "uvicorn", "uvicorn.error"):
+            logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+    if use_structlog:
+        configure_structlog(settings, level_name=level_name, transport=transport)
+    else:
+        structlog.configure(
+            processors=[
+                structlog.processors.add_log_level,
+                structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+            ],
+            wrapper_class=structlog.make_filtering_bound_logger(logging_level),
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            cache_logger_on_first_use=False,
+        )
 
 
-def configure_structlog(settings: LoggingSettings) -> None:
-    """Configure structlog for structured logging."""
-    
-    # Determine processors based on environment
-    processors: list[Processor] = [
+def configure_structlog(
+    settings: LoggingSettings,
+    *,
+    level_name: str,
+    transport: str | None = None,
+) -> None:
+    """Configure structlog; output always goes through stdlib logging (stderr)."""
+    pre_chain: list[Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="ISO"),
         structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
     ]
-    
-    # Add processor for exceptions
-    processors.append(structlog.processors.format_exc_info)
-    
-    # Configure output format
-    if settings.level.upper() == "DEBUG":
-        # Pretty output for development
-        processors.append(structlog.dev.ConsoleRenderer())
+
+    if transport == "stdio" or level_name == "DEBUG":
+        renderer: Processor = structlog.dev.ConsoleRenderer()
     else:
-        # JSON output for production
-        processors.append(structlog.processors.JSONRenderer())
-    
-    # Configure structlog
+        renderer = structlog.processors.JSONRenderer()
+
     structlog.configure(
-        processors=processors,
+        processors=pre_chain + [structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
         wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(logging, settings.level.upper())
+            getattr(logging, level_name)
         ),
-        logger_factory=structlog.WriteLoggerFactory(),
-        cache_logger_on_first_use=True,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=False,
     )
+
+    structlog_formatter = structlog.stdlib.ProcessorFormatter(
+        processor=renderer,
+        foreign_pre_chain=pre_chain,
+    )
+
+    root = logging.getLogger()
+    for handler in root.handlers:
+        if isinstance(handler, logging.StreamHandler) and handler.stream is sys.stderr:
+            handler.setFormatter(structlog_formatter)
 
 
 def get_logger(name: Optional[str] = None) -> structlog.BoundLogger:

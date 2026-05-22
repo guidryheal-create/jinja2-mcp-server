@@ -8,7 +8,9 @@ from typing import Any, Dict, List, Optional, Union
 from .exceptions import ValidationError
 from .logging import get_logger
 
-logger = get_logger(__name__)
+
+def _logger():
+    return get_logger(__name__)
 
 
 def validate_json_params(params: Union[str, Dict[str, Any]], max_size: int = 1024 * 1024) -> Dict[str, Any]:
@@ -24,7 +26,7 @@ def validate_json_params(params: Union[str, Dict[str, Any]], max_size: int = 102
     Raises:
         ValidationError: If validation fails
     """
-    logger.debug("Validating JSON parameters", params_type=type(params).__name__)
+    _logger().debug("Validating JSON parameters", params_type=type(params).__name__)
     
     # Handle string input
     if isinstance(params, str):
@@ -88,7 +90,7 @@ def validate_json_params(params: Union[str, Dict[str, Any]], max_size: int = 102
     # Validate parameter values
     _validate_parameter_values(params)
     
-    logger.debug("JSON parameters validated successfully", param_count=len(params))
+    _logger().debug("JSON parameters validated successfully", param_count=len(params))
     return params
 
 
@@ -180,7 +182,7 @@ def validate_template_content(
     Raises:
         ValidationError: If validation fails
     """
-    logger.debug(
+    _logger().debug(
         "Validating template content", 
         template_name=template_name,
         content_length=len(content)
@@ -224,7 +226,7 @@ def validate_template_content(
     # Basic Jinja2 syntax validation
     _validate_jinja2_syntax(content, template_name)
     
-    logger.debug("Template content validated successfully", template_name=template_name)
+    _logger().debug("Template content validated successfully", template_name=template_name)
     return content
 
 

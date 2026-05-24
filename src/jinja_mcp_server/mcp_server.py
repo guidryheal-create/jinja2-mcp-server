@@ -6,7 +6,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .config import get_settings
 from .jinja.environment import JinjaEnvironmentManager
-from .utils.logging import get_logger, setup_logging
+from .utils.logging import apply_stdio_log_policy, get_logger, setup_logging
 
 
 class JinjaMCPServer:
@@ -95,6 +95,7 @@ class JinjaMCPServer:
 
     async def run_stdio(self) -> None:
         """Run the server with stdio transport."""
+        apply_stdio_log_policy()
         await self.initialize()
         await self.mcp.run_stdio_async()
 
@@ -147,13 +148,14 @@ def main() -> None:
     args = parser.parse_args()
     settings = get_settings()
 
-    log_level = "WARNING" if args.transport == "stdio" else None
+    log_level = "ERROR" if args.transport == "stdio" else None
     if args.transport == "stdio":
         setup_logging(settings.logging, transport="stdio")
 
     server = JinjaMCPServer(log_level=log_level)
 
     if args.transport == "stdio":
+        apply_stdio_log_policy()
         anyio.run(server.run_stdio)
     else:
         anyio.run(server.run_streamable_http, args.host, args.port)

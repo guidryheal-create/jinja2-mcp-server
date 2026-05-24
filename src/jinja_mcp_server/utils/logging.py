@@ -27,6 +27,51 @@ def _bootstrap_structlog() -> None:
 _bootstrap_structlog()
 
 
+def _stream_is_stdout(stream: object) -> bool:
+    return stream in (sys.stdout, sys.__stdout__)
+
+
+def _handler_writes_stdout(handler: logging.Handler) -> bool:
+    return isinstance(handler, logging.StreamHandler) and _stream_is_stdout(handler.stream)
+
+
+def apply_stdio_log_policy() -> None:
+    """Ensure nothing is logged to stdout (MCP stdio JSON-RPC channel).
+
+    Call after FastMCP initializes, which may reconfigure logging.
+    """
+    logging.disable(logging.WARNING)
+
+    root = logging.getLogger()
+    root.setLevel(logging.WARNING)
+
+    for logger in [root, *[
+        logging.getLogger(name)
+        for name in list(logging.root.manager.loggerDict)
+    ]]:
+        if not isinstance(logger, logging.Logger):
+            continue
+        logger.setLevel(logging.WARNING)
+        for handler in list(logger.handlers):
+            if _handler_writes_stdout(handler):
+                logger.removeHandler(handler)
+
+    for handler in list(root.handlers):
+        if _handler_writes_stdout(handler):
+            root.removeHandler(handler)
+
+    if not any(
+        isinstance(h, logging.StreamHandler) and h.stream is sys.stderr
+        for h in root.handlers
+    ):
+        stderr_handler = logging.StreamHandler(sys.stderr)
+        stderr_handler.setLevel(logging.WARNING)
+        stderr_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
+        root.addHandler(stderr_handler)
+
+
 def setup_logging(
     settings: LoggingSettings,
     *,
@@ -70,8 +115,7 @@ def setup_logging(
         root_logger.addHandler(file_handler)
     
     if transport == "stdio":
-        for logger_name in ("mcp", "mcp.server", "fastmcp", "uvicorn", "uvicorn.error"):
-            logging.getLogger(logger_name).setLevel(logging.WARNING)
+        apply_stdio_log_policy()
 
     if use_structlog:
         configure_structlog(settings, level_name=level_name, transport=transport)

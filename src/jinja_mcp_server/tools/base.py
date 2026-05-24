@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel, Field
 
-from ..utils import get_logger
+from ..utils.logging import get_logger
 from ..utils.exceptions import JinjaMCPError, ValidationError
 
 

@@ -8,7 +8,7 @@ from .exceptions import (
     SecurityError,
     ConfigurationError,
 )
-from .logging import get_logger, setup_logging
+from .logging import apply_stdio_log_policy, get_logger, setup_logging
 from .security import SecurityManager
 
 __all__ = [
@@ -19,6 +19,7 @@ __all__ = [
     "SecurityError",
     "ConfigurationError",
     "setup_logging",
+    "apply_stdio_log_policy",
     "get_logger",
     "SecurityManager",
 ] 

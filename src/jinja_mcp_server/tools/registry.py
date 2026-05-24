@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import Settings
-from ..utils import get_logger
+from ..utils.logging import get_logger
 from ..utils.exceptions import ConfigurationError, JinjaMCPError
 from .base import BaseTool, ToolRegistry, ToolSchema
 
